@@ -44,8 +44,8 @@ const config = {
 
 (async () => {
   const client = new Client(config);
-  const { rows, fields } = await client.query('SELECT NOW()');
-  console.log({ rows, fields });
+  const { results, fields } = await client.query('SELECT NOW()');
+  console.log({ results, fields });
   await client.end();
 })().catch(console.error);
 ```
@@ -120,7 +120,7 @@ certificate. Here is a simple example:
 
 ```js
 const { Pool, Client } = require('@node-mysql/mysql');
-const connection = new Client({
+const client = new Client({
   host : 'localhost',
   ssl  : {
     ca : fs.readFileSync(__dirname + '/mysql-ca.crt')
@@ -133,7 +133,7 @@ CA to trust. _You should not do this_.
 
 ```js
 const { Pool, Client } = require('@node-mysql/mysql');
-const connection = new Client({
+const client = new Client({
   host : 'localhost',
   ssl  : {
     // DO NOT DO THIS
@@ -153,7 +153,7 @@ just write the flag name, or prefix it with a plus (case insensitive).
 
 ```js
 const { Pool, Client } = require('@node-mysql/mysql');
-const connection = new Client({
+const client = new Client({
   // disable FOUND_ROWS flag, enable IGNORE_SPACE flag
   flags: '-FOUND_ROWS,IGNORE_SPACE'
 });
@@ -259,21 +259,21 @@ Single query:
 
 ```js  
 (async () => {
-  const { rows, fields } = await pool.query('SELECT NOW()');
-  console.log({ rows, fields });
+  const { results, fields } = await pool.query('SELECT NOW()');
+  console.log({ results, fields });
 })().catch(console.error);
 ```  
 
 check out a client:
 
 ```js  
-(async () => {
+; (async () => {
   const client = await pool.getConnection();
   try {
     const res = await client.query('SELECT * FROM users WHERE id = ?', [1]);
-    console.log(res.rows[0]);
-    const { rows, fields } = await client.query('SELECT NOW()');
-    console.log(rows, fields);
+    console.log(res.results[0]);
+    const { results, fields } = await client.query('SELECT NOW()');
+    console.log(results, fields);
   } finally {
     // Make sure to release the client before any error handling,
     // just in case the error handling itself throws an error.
@@ -452,7 +452,7 @@ mysql.escape:
 
 ```js
 const mysql = require('mysql');
-'SELECT * FROM users WHERE id = ' + mysql.escape(userId);
+const sql = 'SELECT * FROM users WHERE id = ' + mysql.escape(userId);
 ```
 
 connection.escape:
@@ -520,7 +520,7 @@ This escaping allows you to do neat things like this:
 
 ```js
 const post  = { id: 1, title: 'Hello MySQL' };
-const { rows } = await client.query('INSERT INTO posts SET ?', post);
+const { results } = await client.query('INSERT INTO posts SET ?', post);
 console.log(query.sql); // INSERT INTO posts SET `id` = 1, `title` = 'Hello MySQL'
 ```
 
@@ -566,7 +566,7 @@ like to have escaped like this:
 ```js
 const userId = 1;
 const columns = ['username', 'email'];
-const { rows } = await client.query('SELECT ?? FROM ?? WHERE id = ?', [columns, 'users', userId]);
+const { results } = await client.query('SELECT ?? FROM ?? WHERE id = ?', [columns, 'users', userId]);
 // SELECT `username`, `email` FROM `users` WHERE id = 1
 ```
 
@@ -576,8 +576,8 @@ If you are inserting a row into a table with an auto increment primary key, you
 can retrieve the insert id like this:
 
 ```js
-const { rows, fields } = await connection.query('INSERT INTO posts SET ?', {title: 'test'}); 
-console.log(rows.insertId);
+const { results, fields } = await connection.query('INSERT INTO posts SET ?', {title: 'test'}); 
+console.log(results.insertId);
 ```
 
 When dealing with big numbers (above JavaScript Number precision limit), you should
@@ -592,8 +592,8 @@ you will get values rounded to hundreds or thousands due to the precision limit.
 You can get the number of affected rows from an insert, update or delete statement.
 
 ```js
-const { rows, fields } = await connection.query('DELETE FROM posts WHERE title = "wrong"'); 
-console.log('deleted ' + rows.affectedRows + ' rows');
+const { results, fields } = await connection.query('DELETE FROM posts WHERE title = "wrong"'); 
+console.log('deleted ' + results.affectedRows + ' rows');
 ```
 
 ## Getting the number of changed rows
@@ -604,8 +604,8 @@ You can get the number of changed rows from an update statement.
 whose values were not changed.
 
 ```js
-const { rows, fields } = await connection.query('UPDATE posts SET ...'); 
-console.log('changed ' + rows.changedRows + ' rows');
+const { results, fields } = await connection.query('UPDATE posts SET ...'); 
+console.log('changed ' + results.changedRows + ' rows');
 ```
 
 ## Executing queries in parallel
@@ -710,10 +710,10 @@ const pool = new Pool({ multipleStatements: true });
 Once enabled, you can execute multiple statement queries like any other query:
 
 ```js
-const {rows} = await client.query('SELECT 1; SELECT 2');
+const { results } = await client.query('SELECT 1; SELECT 2');
 // `results` is an array with one element for every statement in the query:
-console.log(rows[0]); // [{1: 1}]
-console.log(rows[1]); // [{2: 2}]
+console.log(results[0]); // [{1: 1}]
+console.log(results[1]); // [{2: 2}]
 ```
 
 ## Stored procedures
@@ -735,8 +735,8 @@ However, you can also specify that you want your columns to be nested below
 the table name like this:
 
 ```js
-const options = {sql: '...', nestTables: true};
-const {rows} = await connection.query(options);
+const options = { sql: '...', nestTables: true };
+const { results } = await connection.query(options);
 /* results will be an array like this now:
  * [{
  *   table1: {
@@ -754,8 +754,8 @@ const {rows} = await connection.query(options);
 Or use a string separator to have your results merged.
 
 ```js
-const options = {sql: '...', nestTables: true};
-const {rows} = await connection.query(options);
+const options = { sql: '...', nestTables: true };
+const { results } = await connection.query(options);
 /* results will be an array like this now:
  * [{
  *   table1_fieldA: '...',
@@ -771,20 +771,41 @@ const {rows} = await connection.query(options);
 Simple transaction support is available at the connection level:
 
 ```js
+; (async () => {
+  // note: we don't try/catch this because if connecting throws an exception
+  // we don't need to dispose of the client (it will be undefined)
+  const client = new Client(config);
+  try {
+    await client.beginTransaction();
+    const { results } = await client.query('INSERT INTO posts SET title=?', title);
+    const log = 'Post ' + results.insertId + ' added';
+    await client.query('INSERT INTO log SET data=?', log);
+    await client.commit();
+  } catch (e) {
+    await client.rollback();
+    throw e;
+  } finally {
+    await client.end();
+  }
+})().catch(console.error);
+```
+
+or check out a client from pool
+```js
 const pool = new Pool(config);
-;(async () => {
+; (async () => {
   // note: we don't try/catch this because if connecting throws an exception
   // we don't need to dispose of the client (it will be undefined)
   const client = await pool.getConnection();
   try {
     await client.beginTransaction();
-    const {rows} = await client.query('INSERT INTO posts SET title=?', title);
-    const log = 'Post ' + rows.insertId + ' added';
+    const { results } = await client.query('INSERT INTO posts SET title=?', title);
+    const log = 'Post ' + results.insertId + ' added';
     await client.query('INSERT INTO log SET data=?', log);
     await client.commit();
   } catch (e) {
     await client.rollback();
-    throw e
+    throw e;
   } finally {
     // When done with the connection, release it.
     client.release();
@@ -807,10 +828,10 @@ on will be destroyed and no further operations can be performed.
 ```js
 // Kill query after 60s
 try {
- await connection.query({sql: 'SELECT COUNT(*) AS count FROM big_table', timeout: 60000});
-} catch(error) {
+  await connection.query({ sql: 'SELECT COUNT(*) AS count FROM big_table', timeout: 60000 });
+} catch (error) {
   if (error) {
-    if(error.code === 'PROTOCOL_SEQUENCE_TIMEOUT') {
+    if (error.code === 'PROTOCOL_SEQUENCE_TIMEOUT') {
       throw new Error('too long to count table rows!');
     } else {
       throw error;
@@ -925,16 +946,16 @@ It is not recommended (and may go away / change in the future) to disable type
 casting, but you can currently do so on either the connection:
 
 ```js
-const client = new Client({typeCast: false});
-const pool = new Pool({typeCast: false});
+const client = new Client({ typeCast: false });
+const pool = new Pool({ typeCast: false });
 ```
 
 Or on the query level:
 
 ```js
-const options = {sql: '...', typeCast: false};
-const { rows } = await client.query(options);
-const { rows } = await client.query(options);
+const options = { sql: '...', typeCast: false };
+const { results } = await client.query(options);
+const { results } = await client.query(options);
 ```
 
 ### Custom type casting
@@ -976,7 +997,7 @@ the type cast should convert the string field into a different JavaScript type
 Here's an example of converting `TINYINT(1)` to boolean:
 
 ```js
-new Client({ 
+new Client({
   typeCast: function (field, next) {
     if (field.type === 'TINY' && field.length === 1) {
       return (field.string() === '1'); // 1 = true, 0 = false
@@ -986,7 +1007,7 @@ new Client({
   }
 });
 // or
-new Pool({ 
+new Pool({
   typeCast: function (field, next) {
     if (field.type === 'TINY' && field.length === 1) {
       return (field.string() === '1'); // 1 = true, 0 = false
@@ -1006,16 +1027,16 @@ If you are running into problems, one thing that may help is enabling the
 `debug` mode for the connection:
 
 ```js
-new Client({debug: true});
-new Pool({debug: true});
+new Client({ debug: true });
+new Pool({ debug: true });
 ```
 
 This will print all incoming and outgoing packets on stdout. You can also restrict debugging to
 packet types by passing an array of types to debug:
 
 ```js
-new Client({debug: ['ComQueryPacket', 'RowDataPacket']});
-new Pool({debug: ['ComQueryPacket', 'RowDataPacket']});
+new Client({ debug: ['ComQueryPacket', 'RowDataPacket'] });
+new Pool({ debug: ['ComQueryPacket', 'RowDataPacket'] });
 ```
 
 to restrict debugging to the query and data packets.

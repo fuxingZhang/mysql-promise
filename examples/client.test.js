@@ -10,7 +10,7 @@ const config = {
 
 (async () => {
   const client = new Client(config)
-  const { rows, fields } = await client.query('SELECT NOW()');
-  console.log({ rows, fields });
+  const { results, fields } = await client.query('SELECT NOW()');
+  console.log({ results, fields });
   await client.end();
 })().catch(console.error);

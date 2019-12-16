@@ -1,24 +1,39 @@
 {
   "name": "@node-mysql/mysql",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "wrapper for mysql, to make APIs easier to use and promisify",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/fuxingZhang/mysql-promise.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "mysql",
+    "database",
+    "promise",
+    "node",
+    "nodejs"
+  ],
+  "files": [
+    "lib/",
+    "Changes.md",
+    "License",
+    "Readme.md",
+    "index.js"
+  ],
+  "author": "Zhang Fu Xing <502545703@qq.com>",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/fuxingZhang/mysql-promise/issues"
   },
   "homepage": "https://github.com/fuxingZhang/mysql-promise#readme",
   "dependencies": {
-    "mocha": "^6.2.2",
     "mysql": "^2.17.1"
+  },
+  "devDependencies": {
+    "mocha": "^6.2.2"
   }
 }

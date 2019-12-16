@@ -41,7 +41,7 @@ export interface FieldDef {
 }
 
 export interface QueryResult {
-  rows: any[];
+  results: any[];
   fields: FieldDef[];
 }
 
