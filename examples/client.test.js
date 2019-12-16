@@ -4,8 +4,7 @@ const config = {
   port: '3306',
   user: 'root',
   password: '123456',
-  database: 'zfx',
-  connectionLimit : 10,
+  database: 'zfx'
 };
 
 (async () => {

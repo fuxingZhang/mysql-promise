@@ -25,6 +25,5 @@ const config = {
     client.release();
     // Don't use the connection here, it has been returned to the pool.
   }
-
   await pool.end();
 })().catch(console.error);
