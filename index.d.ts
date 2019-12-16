@@ -6,7 +6,6 @@ export interface ClientConfig {
   localAddress: string,
   socketPath: string,
   password: string,
-  host: string,
   database: string,
   charset: string,
   timezone: string,
@@ -164,8 +163,6 @@ export class Pool {
   query(...args: any[]): Promise<QueryResult>;
 
   end(): Promise<void>;
-
-  destroy(): void;
 
   getConnection(): Promise<PoolClient>;
 
