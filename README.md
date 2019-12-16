@@ -21,6 +21,8 @@ wrapper for [mysql](https://github.com/mysqljs/mysql),  to make APIs easier to u
 [download-image]: https://img.shields.io/npm/dm/@node-mysql/mysql.svg?style=flat-square
 [download-url]: https://npmjs.org/package/@node-mysql/mysql
 
+Node.js 12+ required (Because of use Class private fields)
+
 ## Install
 
 ```bash
@@ -37,8 +39,7 @@ const config = {
   host: 'localhost',
   port: '3306',
   user: 'root',
-  password: '123456',
-  database: 'zfx'
+  password: '123456'
 };
 
 (async () => {
@@ -234,3 +235,602 @@ connection.destroy();
 ```
 
 Unlike `end()` the `destroy()` method does not throw error.
+
+## Pooling connections
+
+Rather than creating and managing connections one-by-one, this module also
+provides built-in connection pooling using `mysql.createPool(config)`.
+[Read more about connection pooling](https://en.wikipedia.org/wiki/Connection_pool).
+
+Create a pool and use it directly:
+
+```js
+const { Pool } = require('@node-mysql/mysql');
+const config = {
+  connectionLimit : 10,
+  host: 'localhost',
+  port: '3306',
+  user: 'root',
+  password: '123456'
+};
+
+(async () => {
+  const pool = new Pool(config);
+  const { rows, fields } = await pool.query('SELECT NOW()');
+  console.log({ rows, fields });
+  await pool.end();
+})().catch(console.error);
+```
+
+If you would like to close the connection and remove it from the pool, use
+`connection.destroy()` instead. The pool will create a new connection the next
+time one is needed.
+
+Connections are lazily created by the pool. If you configure the pool to allow
+up to 100 connections, but only ever use 5 simultaneously, only 5 connections
+will be made. Connections are also cycled round-robin style, with connections
+being taken from the top of the pool and returning to the bottom.
+
+When a previous connection is retrieved from the pool, a ping packet is sent
+to the server to check if the connection is still good.
+
+## Pool options
+
+Pools accept all the same [options as a connection](#connection-options).
+When creating a new connection, the options are simply passed to the connection
+constructor. In addition to those options pools accept a few extras:
+
+* `acquireTimeout`: The milliseconds before a timeout occurs during the connection
+  acquisition. This is slightly different from `connectTimeout`, because acquiring
+  a pool connection does not always involve making a connection. If a connection
+  request is queued, the time the request spends in the queue does not count
+  towards this timeout. (Default: `10000`)
+* `waitForConnections`: Determines the pool's action when no connections are
+  available and the limit has been reached. If `true`, the pool will queue the
+  connection request and call it when one becomes available. If `false`, the
+  pool will immediately call back with an error. (Default: `true`)
+* `connectionLimit`: The maximum number of connections to create at once.
+  (Default: `10`)
+* `queueLimit`: The maximum number of connection requests the pool will queue
+  before returning an error from `getConnection`. If set to `0`, there is no
+  limit to the number of queued connection requests. (Default: `0`)
+
+## Pool events
+
+### acquire
+
+The pool will emit an `acquire` event when a connection is acquired from the pool.
+This is called after all acquiring activity has been performed on the connection,
+right before the connection is handed to the callback of the acquiring code.
+
+```js
+pool.on('acquire', function (connection) {
+  console.log('Connection %d acquired', connection.threadId);
+});
+```
+
+### connection
+
+The pool will emit a `connection` event when a new connection is made within the pool.
+If you need to set session variables on the connection before it gets used, you can
+listen to the `connection` event.
+
+```js
+pool.on('connection', function (connection) {
+  connection.query('SET SESSION auto_increment_increment=1')
+});
+```
+
+### enqueue
+
+The pool will emit an `enqueue` event when a callback has been queued to wait for
+an available connection.
+
+```js
+pool.on('enqueue', function () {
+  console.log('Waiting for available connection slot');
+});
+```
+
+### release
+
+The pool will emit a `release` event when a connection is released back to the
+pool. This is called after all release activity has been performed on the connection,
+so the connection will be listed as free at the time of the event.
+
+```js
+pool.on('release', function (connection) {
+  console.log('Connection %d released', connection.threadId);
+});
+```
+
+## Closing all the connections in a pool
+
+When you are done using the pool, you have to end all the connections or the
+Node.js event loop will stay active until the connections are closed by the
+MySQL server. This is typically done if the pool is used in a script or when
+trying to gracefully shutdown a server. To end all the connections in the
+pool, use the `end` method on the pool:
+
+```js
+const { Pool } = require('@node-mysql/mysql');
+// ...
+(async () => {
+  const pool = new Pool(config);
+  // ...
+  await pool.end();
+})().catch(console.error);
+```
+
+The `end` method takes an _optional_ callback that you can use to know when
+all the connections are ended.
+
+**Once `pool.end` is called, `pool.getConnection` and other operations
+can no longer be performed.** Wait until all connections in the pool are
+released before calling `pool.end`.
+
+`pool.end` calls `connection.end` on every active connection in the pool.
+This queues a `QUIT` packet on the connection and sets a flag to prevent
+`pool.getConnection` from creating new connections. All commands / queries
+already in progress will complete, but new commands won't execute.
+
+## Performing queries
+
+pool.query is the same as client.query
+
+```js
+// The simplest form of .query() is .query(sqlString)
+await client.query('SELECT * FROM `books` WHERE `author` = "David"');
+// The second form .query(sqlString, values) comes when using placeholder values
+await client.query('SELECT * FROM `books` WHERE `author` = ?', ['David']);
+// The third form .query(options) comes when using various advanced options on the query
+await client.query({
+  sql: 'SELECT * FROM `books` WHERE `author` = ?',
+  timeout: 40000, // 40s
+  values: ['David']
+});
+// Note that a combination of the second and third forms can be used where the placeholder values are passed as an argument and not in the options object. The values argument will override the values in the option object.
+await client.query({
+    sql: 'SELECT * FROM `books` WHERE `author` = ?',
+    timeout: 40000, // 40s
+  },
+  ['David']
+});
+// If the query only has a single replacement character (?), and the value is not null, undefined, or an array, it can be passed directly as the second argument to .query:
+await client.query('SELECT * FROM `books` WHERE `author` = ?', 'David');
+```
+
+## Escaping query values
+
+**Caution** These methods of escaping values only works when the
+[NO_BACKSLASH_ESCAPES](https://dev.mysql.com/doc/refman/5.7/en/sql-mode.html#sqlmode_no_backslash_escapes)
+SQL mode is disabled (which is the default state for MySQL servers).
+
+In order to avoid SQL Injection attacks, you should always use `?` characters as placeholders for values you would
+like to have escaped like this:
+
+```js
+await connection.query('SELECT * FROM users WHERE id = ?', [userId]);
+```
+
+Multiple placeholders are mapped to values in the same order as passed. For example,
+in the following query `foo` equals `a`, `bar` equals `b`, `baz` equals `c`, and
+`id` will be `userId`:
+
+```js
+await connection.query('UPDATE users SET foo = ?, bar = ?, baz = ? WHERE id = ?', 
+ ['a', 'b', 'c', userId]);
+```
+
+This looks similar to prepared statements in MySQL, however it really just uses
+the same `mysql.escape()` method internally.
+
+**Caution** This also differs from prepared statements in that all `?` are
+replaced, even those contained in comments and strings.
+
+Different value types are escaped differently, here is how:
+
+* Numbers are left untouched
+* Booleans are converted to `true` / `false`
+* Date objects are converted to `'YYYY-mm-dd HH:ii:ss'` strings
+* Buffers are converted to hex strings, e.g. `X'0fa5'`
+* Strings are safely escaped
+* Arrays are turned into list, e.g. `['a', 'b']` turns into `'a', 'b'`
+* Nested arrays are turned into grouped lists (for bulk inserts), e.g. `[['a',
+  'b'], ['c', 'd']]` turns into `('a', 'b'), ('c', 'd')`
+* Objects that have a `toSqlString` method will have `.toSqlString()` called
+  and the returned value is used as the raw SQL.
+* Objects are turned into `key = 'val'` pairs for each enumerable property on
+  the object. If the property's value is a function, it is skipped; if the
+  property's value is an object, toString() is called on it and the returned
+  value is used.
+* `undefined` / `null` are converted to `NULL`
+* `NaN` / `Infinity` are left as-is. MySQL does not support these, and trying
+  to insert them as values will trigger MySQL errors until they implement
+  support.
+
+This escaping allows you to do neat things like this:
+
+```js
+const post  = { id: 1, title: 'Hello MySQL' };
+const { rows } = await client.query('INSERT INTO posts SET ?', post);
+console.log(query.sql); // INSERT INTO posts SET `id` = 1, `title` = 'Hello MySQL'
+```
+
+## Escaping query identifiers
+
+If you can't trust an SQL identifier (database / table / column name) because it is
+provided by a user, you should use `??` characters as placeholders for identifiers you would
+like to have escaped like this:
+
+```js
+const userId = 1;
+const columns = ['username', 'email'];
+const { rows } = await client.query('SELECT ?? FROM ?? WHERE id = ?', [columns, 'users', userId]);
+// SELECT `username`, `email` FROM `users` WHERE id = 1
+```
+
+## Getting the id of an inserted row
+
+If you are inserting a row into a table with an auto increment primary key, you
+can retrieve the insert id like this:
+
+```js
+const { rows, fields } = await connection.query('INSERT INTO posts SET ?', {title: 'test'}); 
+console.log(rows.insertId);
+```
+
+When dealing with big numbers (above JavaScript Number precision limit), you should
+consider enabling `supportBigNumbers` option to be able to read the insert id as a
+string, otherwise it will throw an error.
+
+This option is also required when fetching big numbers from the database, otherwise
+you will get values rounded to hundreds or thousands due to the precision limit.
+
+## Getting the number of affected rows
+
+You can get the number of affected rows from an insert, update or delete statement.
+
+```js
+const { rows, fields } = await connection.query('DELETE FROM posts WHERE title = "wrong"'); 
+console.log('deleted ' + rows.affectedRows + ' rows');
+```
+
+## Getting the number of changed rows
+
+You can get the number of changed rows from an update statement.
+
+"changedRows" differs from "affectedRows" in that it does not count updated rows
+whose values were not changed.
+
+```js
+const { rows, fields } = await connection.query('UPDATE posts SET ...'); 
+console.log('changed ' + rows.changedRows + ' rows');
+```
+
+## Executing queries in parallel
+
+The MySQL protocol is sequential, this means that you need multiple connections
+to execute queries in parallel. You can use a Pool to manage connections, one
+simple approach is to create one connection per incoming http request.
+
+## Streaming query rows
+
+Sometimes you may want to select large quantities of rows and process each of
+them as they are received. This can be done like this:
+
+```js
+const client = new Client({ multipleStatements: true });
+const pool = new Pool({ multipleStatements: true });
+
+const connection = client.getOriginalConnection();
+// or check out from pool
+const connection = pool.getOriginalConnection();
+
+const query = connection.query('SELECT * FROM posts');
+query
+  .on('error', function(err) {
+    // Handle error, an 'end' event will be emitted after this as well
+  })
+  .on('fields', function(fields) {
+    // the field packets for the rows to follow
+  })
+  .on('result', function(row) {
+    // Pausing the connnection is useful if your processing involves I/O
+    connection.pause();
+
+    processRow(row, function() {
+      connection.resume();
+    });
+  })
+  .on('end', function() {
+    // all rows have been received
+  });
+```
+
+Please note a few things about the example above:
+
+* Usually you will want to receive a certain amount of rows before starting to
+  throttle the connection using `pause()`. This number will depend on the
+  amount and size of your rows.
+* `pause()` / `resume()` operate on the underlying socket and parser. You are
+  guaranteed that no more `'result'` events will fire after calling `pause()`.
+* You MUST NOT provide a callback to the `query()` method when streaming rows.
+* The `'result'` event will fire for both rows as well as OK packets
+  confirming the success of a INSERT/UPDATE query.
+* It is very important not to leave the result paused too long, or you may
+  encounter `Error: Connection lost: The server closed the connection.`
+  The time limit for this is determined by the
+  [net_write_timeout setting](https://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_net_write_timeout)
+  on your MySQL server.
+
+Additionally you may be interested to know that it is currently not possible to
+stream individual row columns, they will always be buffered up entirely. If you
+have a good use case for streaming large fields to and from MySQL, I'd love to
+get your thoughts and contributions on this.
+
+### Piping results with Streams
+
+The query object provides a convenience method `.stream([options])` that wraps
+query events into a [Readable Stream](http://nodejs.org/api/stream.html#stream_class_stream_readable)
+object. This stream can easily be piped downstream and provides automatic
+pause/resume, based on downstream congestion and the optional `highWaterMark`.
+The `objectMode` parameter of the stream is set to `true` and cannot be changed
+(if you need a byte stream, you will need to use a transform stream, like
+[objstream](https://www.npmjs.com/package/objstream) for example).
+
+For example, piping query results into another stream (with a max buffer of 5
+objects) is simply:
+
+```js
+const client = new Client({ multipleStatements: true });
+const pool = new Pool({ multipleStatements: true });
+
+const connection = client.getOriginalConnection();
+// or check out from pool
+const connection = pool.getOriginalConnection();
+
+connection.query('SELECT * FROM posts')
+  .stream({highWaterMark: 5})
+  .pipe(...);
+```
+
+## Multiple statement queries
+
+Support for multiple statements is disabled for security reasons (it allows for
+SQL injection attacks if values are not properly escaped). To use this feature
+you have to enable it for your connection:
+
+```js
+const client = new Client({ multipleStatements: true });
+const pool = new Pool({ multipleStatements: true });
+```
+
+Once enabled, you can execute multiple statement queries like any other query:
+
+```js
+const {rows} = await client.query('SELECT 1; SELECT 2');
+// `results` is an array with one element for every statement in the query:
+console.log(rows[0]); // [{1: 1}]
+console.log(rows[1]); // [{2: 2}]
+```
+
+## Stored procedures
+
+You can call stored procedures from your queries as with any other mysql driver.
+If the stored procedure produces several result sets, they are exposed to you
+the same way as the results for multiple statement queries.
+
+## Joins with overlapping column names
+
+When executing joins, you are likely to get result sets with overlapping column
+names.
+
+By default, node-mysql will overwrite colliding column names in the
+order the columns are received from MySQL, causing some of the received values
+to be unavailable.
+
+However, you can also specify that you want your columns to be nested below
+the table name like this:
+
+```js
+const options = {sql: '...', nestTables: true};
+const {rows} = await connection.query(options);
+/* results will be an array like this now:
+ * [{
+ *   table1: {
+ *     fieldA: '...',
+ *     fieldB: '...',
+ *   },
+ *   table2: {
+ *     fieldA: '...',
+ *     fieldB: '...',
+ *   },
+ * }, ...]
+ */
+```
+
+Or use a string separator to have your results merged.
+
+```js
+const options = {sql: '...', nestTables: true};
+const {rows} = await connection.query(options);
+/* results will be an array like this now:
+ * [{
+ *   table1_fieldA: '...',
+ *   table1_fieldB: '...',
+ *   table2_fieldA: '...',
+ *   table2_fieldB: '...',
+ * }, ...]
+ */
+```
+
+## Transactions
+
+Simple transaction support is available at the connection level:
+
+```js
+const pool = new Pool(config);
+;(async () => {
+  // note: we don't try/catch this because if connecting throws an exception
+  // we don't need to dispose of the client (it will be undefined)
+  const client = await pool.getConnection();
+  try {
+    await client.beginTransaction();
+    const {rows} = await client.query('INSERT INTO posts SET title=?', title);
+    const log = 'Post ' + rows.insertId + ' added';
+    await client.query('INSERT INTO log SET data=?', log);
+    await client.commit();
+  } catch (e) {
+    await client.rollback();
+    throw e
+  } finally {
+    // When done with the connection, release it.
+    client.release();
+  }
+})().catch(console.error);
+```
+Please note that beginTransaction(), commit() and rollback() are simply convenience
+functions that execute the START TRANSACTION, COMMIT, and ROLLBACK commands respectively.
+It is important to understand that many commands in MySQL can cause an implicit commit,
+as described [in the MySQL documentation](http://dev.mysql.com/doc/refman/5.5/en/implicit-commit.html)
+
+## Timeouts
+
+Every operation takes an optional inactivity timeout option. This allows you to
+specify appropriate timeouts for operations. It is important to note that these
+timeouts are not part of the MySQL protocol, and rather timeout operations through
+the client. This means that when a timeout is reached, the connection it occurred
+on will be destroyed and no further operations can be performed.
+
+```js
+// Kill query after 60s
+try {
+ await connection.query({sql: 'SELECT COUNT(*) AS count FROM big_table', timeout: 60000});
+} catch(error) {
+  if (error) {
+    if(error.code === 'PROTOCOL_SEQUENCE_TIMEOUT') {
+      throw new Error('too long to count table rows!');
+    } else {
+      throw error;
+    }
+  }
+}
+```
+
+## Error handling
+
+This module comes with a consistent approach to error handling that you should
+review carefully in order to write solid applications.
+
+Most errors created by this module are instances of the JavaScript [Error][]
+object. Additionally they typically come with two extra properties:
+
+* `err.code`: String, contains the MySQL server error symbol if the error is
+  a [MySQL server error][] (e.g. `'ER_ACCESS_DENIED_ERROR'`), a Node.js error
+  code if it is a Node.js error (e.g. `'ECONNREFUSED'`), or an internal error
+  code (e.g. `'PROTOCOL_CONNECTION_LOST'`).
+* `err.errno`: Number, contains the MySQL server error number. Only populated
+  from [MySQL server error][].
+* `err.fatal`: Boolean, indicating if this error is terminal to the connection
+  object. If the error is not from a MySQL protocol operation, this property
+  will not be defined.
+* `err.sql`: String, contains the full SQL of the failed query. This can be
+  useful when using a higher level interface like an ORM that is generating
+  the queries.
+* `err.sqlState`: String, contains the five-character SQLSTATE value. Only populated from [MySQL server error][].
+* `err.sqlMessage`: String, contains the message string that provides a
+  textual description of the error. Only populated from [MySQL server error][].
+
+[Error]: https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Error
+[MySQL server error]: https://dev.mysql.com/doc/refman/5.5/en/server-error-reference.html
+
+Fatal errors are propagated to *all* pending callbacks. In the example below, a
+fatal error is triggered by trying to connect to an invalid port. Therefore the
+error object is propagated to both pending callbacks:
+
+```js
+console.log(err.code); // 'ECONNREFUSED'
+console.log(err.fatal); // true
+```
+
+Note: `'error'` events are special in node. If they occur without an attached
+listener, a stack trace is printed and your process is killed.
+
+**tl;dr:** This module does not want you to deal with silent failures. You
+should always provide callbacks to your method calls. If you want to ignore
+this advice and suppress unhandled errors, you can do this:
+
+```js
+// I am Chuck Norris:
+connection.on('error', function() {});
+```
+
+## Exception Safety
+
+This module is exception safe. That means you can continue to use it, even if
+one of your callback functions throws an error which you're catching using
+'uncaughtException' or a domain.
+
+## Type casting
+
+For your convenience, this driver will cast mysql types into native JavaScript
+types by default. The following mappings exist:
+
+### Number
+
+* TINYINT
+* SMALLINT
+* INT
+* MEDIUMINT
+* YEAR
+* FLOAT
+* DOUBLE
+
+### Date
+
+* TIMESTAMP
+* DATE
+* DATETIME
+
+### Buffer
+
+* TINYBLOB
+* MEDIUMBLOB
+* LONGBLOB
+* BLOB
+* BINARY
+* VARBINARY
+* BIT (last byte will be filled with 0 bits as necessary)
+
+### String
+
+**Note** text in the binary character set is returned as `Buffer`, rather
+than a string.
+
+* CHAR
+* VARCHAR
+* TINYTEXT
+* MEDIUMTEXT
+* LONGTEXT
+* TEXT
+* ENUM
+* SET
+* DECIMAL (may exceed float precision)
+* BIGINT (may exceed float precision)
+* TIME (could be mapped to Date, but what date would be set?)
+* GEOMETRY (never used those, get in touch if you do)
+
+It is not recommended (and may go away / change in the future) to disable type
+casting, but you can currently do so on the query level:
+
+```js
+const options = {sql: '...', typeCast: false};
+const { rows } = await connection.query(options);
+```
+
+## Running unit tests
+
+```bash
+$ npm test
+```
