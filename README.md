@@ -209,6 +209,7 @@ done by calling the `end()` method:
 // ...
 ;(async () => {
   const connection = new Client(config);
+  // ...
   await connection.end();
 })().catch(console.error);
 ```
@@ -224,9 +225,7 @@ Additionally `destroy()` guarantees that no more events or callbacks will be
 triggered for the connection.
 
 ```js
-const connection = new Client(config);
-connection.destroy();
-// or
+// ...
 ;(async () => {
   const connection = new Client(config);
   await client.query('SELECT NOW()');
@@ -253,14 +252,36 @@ const config = {
   user: 'root',
   password: '123456'
 };
+const pool = new Pool(config);
+```  
 
+Single query:
+
+```js  
 (async () => {
-  const pool = new Pool(config);
   const { rows, fields } = await pool.query('SELECT NOW()');
   console.log({ rows, fields });
-  await pool.end();
 })().catch(console.error);
-```
+```  
+
+check out a client:
+
+```js  
+(async () => {
+  const client = await pool.getConnection();
+  try {
+    const res = await client.query('SELECT * FROM users WHERE id = ?', [1]);
+    console.log(res.rows[0]);
+    const { rows, fields } = await client.query('SELECT NOW()');
+    console.log(rows, fields);
+  } finally {
+    // Make sure to release the client before any error handling,
+    // just in case the error handling itself throws an error.
+    client.release();
+    // Don't use the connection here, it has been returned to the pool.
+  }
+})().catch(console.error);
+```  
 
 If you would like to close the connection and remove it from the pool, use
 `connection.destroy()` instead. The pool will create a new connection the next
@@ -376,8 +397,6 @@ already in progress will complete, but new commands won't execute.
 
 ## Performing queries
 
-pool.query is the same as client.query
-
 ```js
 // The simplest form of .query() is .query(sqlString)
 await client.query('SELECT * FROM `books` WHERE `author` = "David"');
@@ -400,13 +419,61 @@ await client.query({
 await client.query('SELECT * FROM `books` WHERE `author` = ?', 'David');
 ```
 
+pool.query is the same 
+
+```js
+await pool.query('SELECT * FROM `books` WHERE `author` = "David"');
+await pool.query('SELECT * FROM `books` WHERE `author` = ?', ['David']);
+await pool.query({
+  sql: 'SELECT * FROM `books` WHERE `author` = ?',
+  timeout: 40000, // 40s
+  values: ['David']
+});
+await pool.query({
+    sql: 'SELECT * FROM `books` WHERE `author` = ?',
+    timeout: 40000, // 40s
+  },
+  ['David']
+});
+await pool.query('SELECT * FROM `books` WHERE `author` = ?', 'David');
+```
+
 ## Escaping query values
 
 **Caution** These methods of escaping values only works when the
 [NO_BACKSLASH_ESCAPES](https://dev.mysql.com/doc/refman/5.7/en/sql-mode.html#sqlmode_no_backslash_escapes)
 SQL mode is disabled (which is the default state for MySQL servers).
 
-In order to avoid SQL Injection attacks, you should always use `?` characters as placeholders for values you would
+In order to avoid SQL Injection attacks, you should always escape any user
+provided data before using it inside a SQL query. You can do so using the
+`mysql.escape()`, `connection.escape()` or `pool.escape()` methods:
+
+mysql.escape:
+
+```js
+const mysql = require('mysql');
+'SELECT * FROM users WHERE id = ' + mysql.escape(userId);
+```
+
+connection.escape:
+
+```js
+const client = new Client(config);
+const userId = 'some user provided value';
+const sql    = 'SELECT * FROM users WHERE id = ' + client.escape(userId);
+await client.query(sql);
+```
+
+pool.escape
+
+```js
+const pool = new Pool(config);
+const userId = 'some user provided value';
+const sql    = 'SELECT * FROM users WHERE id = ' + pool.escape(userId);
+await pool.query(sql);
+```
+
+Alternatively, you can use `?` characters as placeholders for values you would
 like to have escaped like this:
 
 ```js
@@ -423,7 +490,7 @@ await connection.query('UPDATE users SET foo = ?, bar = ?, baz = ? WHERE id = ?'
 ```
 
 This looks similar to prepared statements in MySQL, however it really just uses
-the same `mysql.escape()` method internally.
+the same `connection.escape()` method internally.
 
 **Caution** This also differs from prepared statements in that all `?` are
 replaced, even those contained in comments and strings.
@@ -455,6 +522,39 @@ This escaping allows you to do neat things like this:
 const post  = { id: 1, title: 'Hello MySQL' };
 const { rows } = await client.query('INSERT INTO posts SET ?', post);
 console.log(query.sql); // INSERT INTO posts SET `id` = 1, `title` = 'Hello MySQL'
+```
+
+And the `toSqlString` method allows you to form complex queries with functions:
+
+```js
+const mysql = require('mysql');
+const CURRENT_TIMESTAMP = { toSqlString: function() { return 'CURRENT_TIMESTAMP()'; } };
+const sql = mysql.format('UPDATE posts SET modified = ? WHERE id = ?', [CURRENT_TIMESTAMP, 42]);
+console.log(sql); // UPDATE posts SET modified = CURRENT_TIMESTAMP() WHERE id = 42
+```
+
+To generate objects with a `toSqlString` method, the `mysql.raw()` method can
+be used. This creates an object that will be left un-touched when using in a `?`
+placeholder, useful for using functions as dynamic values:
+
+**Caution** The string provided to `mysql.raw()` will skip all escaping
+functions when used, so be careful when passing in unvalidated input.
+
+```js
+const mysql = require('mysql');
+const CURRENT_TIMESTAMP = mysql.raw('CURRENT_TIMESTAMP()');
+const sql = mysql.format('UPDATE posts SET modified = ? WHERE id = ?', [CURRENT_TIMESTAMP, 42]);
+console.log(sql); // UPDATE posts SET modified = CURRENT_TIMESTAMP() WHERE id = 42
+```
+
+If you feel the need to escape queries by yourself, you can also use the escaping
+function directly:
+
+```js
+const mysql = require('mysql');
+const query = "SELECT * FROM posts WHERE title=" + mysql.escape("Hello MySQL");
+
+console.log(query); // SELECT * FROM posts WHERE title='Hello MySQL'
 ```
 
 ## Escaping query identifiers
@@ -586,8 +686,9 @@ objects) is simply:
 const client = new Client({ multipleStatements: true });
 const pool = new Pool({ multipleStatements: true });
 
+// the original connection of https://github.com/mysqljs/mysql mysql.createConnection
 const connection = client.getOriginalConnection();
-// or check out from pool
+// the original connection of https://github.com/mysqljs/mysql pool.getConnection
 const connection = pool.getOriginalConnection();
 
 connection.query('SELECT * FROM posts')
@@ -762,7 +863,6 @@ should always provide callbacks to your method calls. If you want to ignore
 this advice and suppress unhandled errors, you can do this:
 
 ```js
-// I am Chuck Norris:
 connection.on('error', function() {});
 ```
 
@@ -822,12 +922,126 @@ than a string.
 * GEOMETRY (never used those, get in touch if you do)
 
 It is not recommended (and may go away / change in the future) to disable type
-casting, but you can currently do so on the query level:
+casting, but you can currently do so on either the connection:
+
+```js
+const client = new Client({typeCast: false});
+const pool = new Pool({typeCast: false});
+```
+
+Or on the query level:
 
 ```js
 const options = {sql: '...', typeCast: false};
-const { rows } = await connection.query(options);
+const { rows } = await client.query(options);
+const { rows } = await client.query(options);
 ```
+
+### Custom type casting
+
+You can also pass a function and handle type casting yourself. You're given some
+column information like database, table and name and also type and length. If you
+just want to apply a custom type casting to a specific type you can do it and then
+fallback to the default.
+
+The function is provided two arguments `field` and `next` and is expected to
+return the value for the given field by invoking the parser functions through
+the `field` object.
+
+The `field` argument is a `Field` object and contains data about the field that
+need to be parsed. The following are some of the properties on a `Field` object:
+
+  * `db` - a string of the database the field came from.
+  * `table` - a string of the table the field came from.
+  * `name` - a string of the field name.
+  * `type` - a string of the field type in all caps.
+  * `length` - a number of the field length, as given by the database.
+
+The `next` argument is a `function` that, when called, will return the default
+type conversion for the given field.
+
+When getting the field data, the following helper methods are present on the
+`field` object:
+
+  * `.string()` - parse the field into a string.
+  * `.buffer()` - parse the field into a `Buffer`.
+  * `.geometry()` - parse the field as a geometry value.
+
+The MySQL protocol is a text-based protocol. This means that over the wire, all
+field types are represented as a string, which is why only string-like functions
+are available on the `field` object. Based on the type information (like `INT`),
+the type cast should convert the string field into a different JavaScript type
+(like a `number`).
+
+Here's an example of converting `TINYINT(1)` to boolean:
+
+```js
+new Client({ 
+  typeCast: function (field, next) {
+    if (field.type === 'TINY' && field.length === 1) {
+      return (field.string() === '1'); // 1 = true, 0 = false
+    } else {
+      return next();
+    }
+  }
+});
+// or
+new Pool({ 
+  typeCast: function (field, next) {
+    if (field.type === 'TINY' && field.length === 1) {
+      return (field.string() === '1'); // 1 = true, 0 = false
+    } else {
+      return next();
+    }
+  }
+});
+```
+
+__WARNING: YOU MUST INVOKE the parser using one of these three field functions
+in your custom typeCast callback. They can only be called once.__
+
+## Debugging and reporting problems
+
+If you are running into problems, one thing that may help is enabling the
+`debug` mode for the connection:
+
+```js
+new Client({debug: true});
+new Pool({debug: true});
+```
+
+This will print all incoming and outgoing packets on stdout. You can also restrict debugging to
+packet types by passing an array of types to debug:
+
+```js
+new Client({debug: ['ComQueryPacket', 'RowDataPacket']});
+new Pool({debug: ['ComQueryPacket', 'RowDataPacket']});
+```
+
+to restrict debugging to the query and data packets.
+
+If that does not help, feel free to open a GitHub issue. A good GitHub issue
+will have:
+
+* The minimal amount of code required to reproduce the problem (if possible)
+* As much debugging output and information about your environment (mysql
+  version, node version, os, etc.) as you can gather.
+
+## Security issues
+
+Security issues should not be first reported through GitHub or another public
+forum, but kept private in order for the collaborators to assess the report
+and either (a) devise a fix and plan a release date or (b) assert that it is
+not a security issue (in which case it can be posted in a public forum, like
+a GitHub issue).
+
+The primary private forum is email, either by emailing the module's author or
+opening a GitHub issue simply asking to whom a security issues should be
+addressed to without disclosing the issue or type of issue.
+
+An ideal report would include a clear indication of what the security issue is
+and how it would be exploited, ideally with an accompanying proof of concept
+("PoC") for collaborators to work against and validate potentional fixes against.
 
 ## Running unit tests
 

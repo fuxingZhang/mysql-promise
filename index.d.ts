@@ -101,6 +101,16 @@ export class Client {
   end(): Promise<void>;
 
   destroy(): void;
+
+  getOriginalConnection(): any;
+
+  escape(val: string): string;
+
+  beginTransaction(): Promise<void>;
+
+  commit(): Promise<void>;
+
+  rollback(): Promise<void>;
 }
 
 export interface PoolConfig extends ClientConfig{
@@ -108,6 +118,24 @@ export interface PoolConfig extends ClientConfig{
   waitForConnections: string,
   connectionLimit: string,
   queueLimit: string,
+}
+
+export interface PoolClient {
+  query(...args: any[]): Promise<QueryResult>;
+
+  end(): Promise<void>;
+
+  destroy(): void;
+
+  release(): void;
+
+  escape(val: string): string;
+
+  beginTransaction(): Promise<void>;
+
+  commit(): Promise<void>;
+
+  rollback(): Promise<void>;
 }
 
 export class Pool {
@@ -138,4 +166,10 @@ export class Pool {
   end(): Promise<void>;
 
   destroy(): void;
+
+  getConnection(): Promise<PoolClient>;
+
+  escape(val: string): string;
+
+  getOriginalConnection(): Promise<any>;
 }

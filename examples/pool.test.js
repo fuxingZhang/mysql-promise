@@ -12,5 +12,19 @@ const config = {
   const pool = new Pool(config);
   const { rows, fields } = await pool.query('SELECT NOW()');
   console.log({ rows, fields });
+
+  const client = await pool.getConnection();
+  try {
+    const res1 = await client.query('SELECT * FROM user WHERE id = ?', [1]);
+    console.log(res1);
+    const res2 = await client.query('SELECT NOW()');
+    console.log(res2);
+  } finally {
+    // Make sure to release the client before any error handling,
+    // just in case the error handling itself throws an error.
+    client.release();
+    // Don't use the connection here, it has been returned to the pool.
+  }
+
   await pool.end();
 })().catch(console.error);
