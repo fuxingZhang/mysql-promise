@@ -1,6 +1,6 @@
 {
   "name": "@node-mysql/mysql",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "wrapper for mysql, to make APIs easier to use and promisify",
   "main": "index.js",
   "scripts": {
@@ -16,13 +16,6 @@
     "promise",
     "node",
     "nodejs"
-  ],
-  "files": [
-    "lib/",
-    "Changes.md",
-    "License",
-    "Readme.md",
-    "index.js"
   ],
   "author": "Zhang Fu Xing <502545703@qq.com>",
   "license": "MIT",
