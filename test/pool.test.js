@@ -1,91 +1,104 @@
-// 'use strict';
+'use strict';
 
-// const assert = require('assert');
-// const { Pool } = require('../index');
-// const config = {
-//   "host": "localhost",
-//   "port": "3306",
-//   "user": "root",
-//   "password": "123456",
-//   "database": "zfx"
-// };
+const assert = require('assert');
+const { Pool } = require('../index');
 
-// (async () => {
-//   const client = new Client(config)
-//   const { results, fields } = await client.query('SELECT NOW()');
-//   console.log({ results, fields });
-//   await client.end()
+describe('pool should ok', function () {
+  const config = {
+    "host": "localhost",
+    "port": "3306",
+    "user": "root",
+    "password": "123456",
+    "database": "zfx"
+  };
+  const table = 'mysql_promise_test';
+  const id = 1;
+  const username = 'zfx';
+  const username2 = 'zfx2';
+  const fullname = 'zhangfxuing';
+  const pool = new Pool(config);
 
-//   // // pools will use environment variables
-//   // // for connection information
-//   // const pool = new Pool()
-//   // pool.query('SELECT NOW()', (err, res) => {
-//   //   console.log(err, res)
-//   //   pool.end()
-//   // })
-//   // // you can also use async/await
-//   // const res = await pool.query('SELECT NOW()')
-//   // await pool.end()
-//   // clients will also use environment variables
-//   // for connection information
-// })().catch(console.error);
+  before(async () => {
+    await pool.query(`DROP TABLE IF EXISTS ${table}`);
 
-// let app;
-// const uid = utility.randomString();
+    await pool.query(`CREATE TABLE ${table} (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      username varchar(255) DEFAULT NULL,
+      fullname varchar(255) DEFAULT NULL,
+      PRIMARY KEY (id)
+    )`);
+  });
 
-// before(() => {
-//   app = mm.app({
-//     baseDir: 'apps/mysqlapp',
-//   });
-//   return app.ready();
-// });
+  after(async () => {
+    await pool.query(`DROP TABLE IF EXISTS ${table}`);
+    await pool.end();
+  });
 
-// beforeEach(function* () {
-//   // init test datas
-//   try {
-//     yield app.mysql.query(`insert into npm_auth set user_id = 'egg-${uid}-1', password = '1'`);
-//     yield app.mysql.query(`insert into npm_auth set user_id = 'egg-${uid}-2', password = '2'`);
-//     yield app.mysql.query(`insert into npm_auth set user_id = 'egg-${uid}-3', password = '3'`);
-//     yield app.mysql.queryOne(`select * from npm_auth where user_id = 'egg-${uid}-3'`);
-//   } catch (err) {
-//     console.log('init test datas error: %s', err);
-//   }
-// });
+  it('insert should ok', async () => {
+    const res = await pool.query(`insert into ?? set id=?, username=?, fullname=?`,
+      [table, id, username, fullname]);
+    assert(res.results.affectedRows === 1);
+  });
 
-// afterEach(function* () {
-//   // 清空测试数据
-//   yield app.mysql.query(`delete from npm_auth where user_id like 'egg-${uid}%'`);
-// });
+  it('query should ok', async () => {
+    const res = await pool.query('select * from ?? where id=?', [table, id]);
+    assert(res.results);
+    assert(res.results.length === 1);
+    const row = res.results[0];
+    assert(row.id === id);
+    assert(row.username === username);
+    assert(row.fullname === fullname);
+  });
 
-// after(done => {
-//   app.mysql.end(err => {
-//     app.close();
-//     done(err);
-//   });
-// });
+  it('limit should ok', async () => {
+    const res = await pool.query('select * from ?? limit 0,0', [table]);
+    assert(res.results);
+    assert(res.results.length === 0);
+  });
 
-// afterEach(mm.restore);
+  it('update should ok', async () => {
+    const res1 = await pool.query('update ?? set username=? where id=?', [table, username2, 1]);
+    assert(res1.results.affectedRows === 1);
+    const { results } = await pool.query('select * from ?? where id=?', [table, 1]);
+    assert(results[0].username, username2);
+  });
 
-// describe('#indexOf()', function () {
-//   const dir = './test/dir';
-//   const filename = 'text.js';
-//   const filepath = `${dir}/${filename}`;
+  it('delete should ok', async () => {
+    const res = await pool.query('delete from ?? where id=?', [table, 1]);
+    assert(res.results.affectedRows === 1);
+  });
 
-//   before(() => {
-//     fs.mkdirSync(dir);
-//     assert(fs.existsSync(dir) === true);
-
-//     fs.writeFileSync(filepath, 'test');
-//     assert(fs.existsSync(filepath) === true);
-//   });
-
-//   it('rmdir should ok', async () => {
-//     try {
-//       await rmdir(dir);
-//     } catch (error) {
-//       assert(false)
-//     }
-
-//     assert(fs.existsSync(dir) === false);
-//   });
-// });
+  it('transaction should ok', async () => {
+    const username3 = 'zfx3';
+    const username4 = 'zfx4';
+    const client = await pool.getConnection();
+    try {
+      await client.beginTransaction();
+      const res1 = await client.query(`INSERT INTO ${table} SET ?`, {
+        id: 2,
+        username: username3,
+        fullname: 'any'
+      });
+      assert(res1.results.affectedRows === 1);
+      const res2 = await client.query(`INSERT INTO ${table} SET ?`, {
+        id: 3,
+        username: username4,
+        fullname: 'any'
+      });
+      assert(res2.results.affectedRows === 1);
+      await client.commit();
+      const res3 = await client.query('select * from ?? where id=?', [table, 2]);
+      assert(res3.results[0].username === username3);
+      const res4 = await client.query('select * from ?? where id=?', [table, 3]);
+      assert(res4.results[0].username === username4);
+      const res5 = await client.query('select * from ??', [table]);
+      assert(res5.results.length === 2);
+    } catch (e) {
+      await client.rollback();
+      throw e;
+    } finally {
+      // When done with the connection, release it.
+      client.release();
+    }
+  });
+});

@@ -1,6 +1,6 @@
 {
   "name": "@node-mysql/mysql",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "wrapper for mysql, to make APIs easier to use and promisify",
   "main": "index.js",
   "scripts": {

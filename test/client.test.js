@@ -3,7 +3,7 @@
 const assert = require('assert');
 const { Client } = require('../index');
 
-describe('#indexOf()', function () {
+describe('client should ok', function () {
   const config = {
     "host": "localhost",
     "port": "3306",
@@ -43,7 +43,7 @@ describe('#indexOf()', function () {
   });
 
   it('query should ok', async () => {
-    const res = await client.query('select * from ?? where id=?', [table, 1]);
+    const res = await client.query('select * from ?? where id=?', [table, id]);
     assert(res.results);
     assert(res.results.length === 1);
     const row = res.results[0];
