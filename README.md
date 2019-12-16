@@ -121,9 +121,9 @@ certificate. Here is a simple example:
 ```js
 const { Pool, Client } = require('@node-mysql/mysql');
 const client = new Client({
-  host : 'localhost',
-  ssl  : {
-    ca : fs.readFileSync(__dirname + '/mysql-ca.crt')
+  host: 'localhost',
+  ssl: {
+    ca: fs.readFileSync(__dirname + '/mysql-ca.crt')
   }
 });
 ```
@@ -134,8 +134,8 @@ CA to trust. _You should not do this_.
 ```js
 const { Pool, Client } = require('@node-mysql/mysql');
 const client = new Client({
-  host : 'localhost',
-  ssl  : {
+  host: 'localhost',
+  ssl: {
     // DO NOT DO THIS
     // set up your ca correctly to trust the connection
     rejectUnauthorized: false
@@ -206,11 +206,10 @@ There are two ways to end a connection. Terminating a connection gracefully is
 done by calling the `end()` method:
 
 ```js
-// ...
 ;(async () => {
-  const connection = new Client(config);
+  const client = new Client(config);
   // ...
-  await connection.end();
+  await client.end();
 })().catch(console.error);
 ```
 
@@ -225,11 +224,10 @@ Additionally `destroy()` guarantees that no more events or callbacks will be
 triggered for the connection.
 
 ```js
-// ...
 ;(async () => {
-  const connection = new Client(config);
-  await client.query('SELECT NOW()');
-  connection.destroy();
+  const client = new Client(config);
+  // ...
+  client.destroy();
 })().catch(console.error);
 ```
 
@@ -621,10 +619,12 @@ them as they are received. This can be done like this:
 
 ```js
 const client = new Client({ multipleStatements: true });
-const pool = new Pool({ multipleStatements: true });
+// the original connection of https://github.com/mysqljs/mysql mysql.createConnection
+const connection = client.getOriginalConnection(); 
 
-const connection = client.getOriginalConnection();
 // or check out from pool
+const pool = new Pool({ multipleStatements: true });
+// the original connection of https://github.com/mysqljs/mysql pool.getConnection
 const connection = pool.getOriginalConnection();
 
 const query = connection.query('SELECT * FROM posts');
@@ -684,10 +684,11 @@ objects) is simply:
 
 ```js
 const client = new Client({ multipleStatements: true });
-const pool = new Pool({ multipleStatements: true });
-
 // the original connection of https://github.com/mysqljs/mysql mysql.createConnection
 const connection = client.getOriginalConnection();
+
+// or check out from pool
+const pool = new Pool({ multipleStatements: true });
 // the original connection of https://github.com/mysqljs/mysql pool.getConnection
 const connection = pool.getOriginalConnection();
 
