@@ -1,22 +1,22 @@
 {
-  "name": "mysql-promise-plus",
+  "name": "@node-mysql/mysql",
   "version": "0.1.0",
-  "description": "wrapper for mysql,  to make APIs easier to use and promisify",
+  "description": "wrapper for mysql, to make APIs easier to use and promisify",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fuxingZhang/mysql-promise-plus.git"
+    "url": "git+https://github.com/fuxingZhang/mysql-promise.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/fuxingZhang/mysql-promise-plus/issues"
+    "url": "https://github.com/fuxingZhang/mysql-promise/issues"
   },
-  "homepage": "https://github.com/fuxingZhang/mysql-promise-plus#readme",
+  "homepage": "https://github.com/fuxingZhang/mysql-promise#readme",
   "dependencies": {
     "mysql": "^2.17.1"
   }

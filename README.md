@@ -1,4 +1,4 @@
-# mysql-promise-plus
+# @node-mysql/mysql
 wrapper for [mysql](https://github.com/mysqljs/mysql),  to make APIs easier to use and promisify
 
 [![NPM version][npm-image]][npm-url]
@@ -8,23 +8,23 @@ wrapper for [mysql](https://github.com/mysqljs/mysql),  to make APIs easier to u
 [![Known Vulnerabilities][snyk-image]][snyk-url]
 [![npm download][download-image]][download-url]
 
-[npm-image]: https://img.shields.io/npm/v/mysql-promise-plus.svg?style=flat-square
-[npm-url]: https://npmjs.org/package/mysql-promise-plus
-[travis-image]: https://img.shields.io/travis/eggjs/mysql-promise-plus.svg?style=flat-square
-[travis-url]: https://travis-ci.org/eggjs/mysql-promise-plus
-[codecov-image]: https://img.shields.io/codecov/c/github/eggjs/mysql-promise-plus.svg?style=flat-square
-[codecov-url]: https://codecov.io/github/eggjs/mysql-promise-plus?branch=master
-[david-image]: https://img.shields.io/david/eggjs/mysql-promise-plus.svg?style=flat-square
-[david-url]: https://david-dm.org/eggjs/mysql-promise-plus
-[snyk-image]: https://snyk.io/test/npm/mysql-promise-plus/badge.svg?style=flat-square
-[snyk-url]: https://snyk.io/test/npm/mysql-promise-plus
-[download-image]: https://img.shields.io/npm/dm/mysql-promise-plus.svg?style=flat-square
-[download-url]: https://npmjs.org/package/mysql-promise-plus
+[npm-image]: https://img.shields.io/npm/v/@node-mysql/mysql.svg?style=flat-square
+[npm-url]: https://npmjs.org/package/@node-mysql/mysql
+[travis-image]: https://img.shields.io/travis/eggjs/@node-mysql/mysql.svg?style=flat-square
+[travis-url]: https://travis-ci.org/eggjs/@node-mysql/mysql
+[codecov-image]: https://img.shields.io/codecov/c/github/eggjs/@node-mysql/mysql.svg?style=flat-square
+[codecov-url]: https://codecov.io/github/eggjs/@node-mysql/mysql?branch=master
+[david-image]: https://img.shields.io/david/eggjs/@node-mysql/mysql.svg?style=flat-square
+[david-url]: https://david-dm.org/eggjs/@node-mysql/mysql
+[snyk-image]: https://snyk.io/test/npm/@node-mysql/mysql/badge.svg?style=flat-square
+[snyk-url]: https://snyk.io/test/npm/@node-mysql/mysql
+[download-image]: https://img.shields.io/npm/dm/@node-mysql/mysql.svg?style=flat-square
+[download-url]: https://npmjs.org/package/@node-mysql/mysql
 
 ## Install
 
 ```bash
-$ npm i mysql-promise-plus --save
+$ npm i @node-mysql/mysql --save
 ```
 
 ## Client  
@@ -32,7 +32,7 @@ $ npm i mysql-promise-plus --save
 ### example
 
 ```js
-const { Pool, Client } = require('mysql-promise-plus');
+const { Pool, Client } = require('@node-mysql/mysql');
 const config = {
   host: 'localhost',
   port: '3306',
@@ -118,7 +118,7 @@ Please note the arguments expect a string of the certificate, not a file name to
 certificate. Here is a simple example:
 
 ```js
-const { Pool, Client } = require('mysql-promise-plus');
+const { Pool, Client } = require('@node-mysql/mysql');
 const connection = new Client({
   host : 'localhost',
   ssl  : {
@@ -131,7 +131,7 @@ You can also connect to a MySQL server without properly providing the appropriat
 CA to trust. _You should not do this_.
 
 ```js
-const { Pool, Client } = require('mysql-promise-plus');
+const { Pool, Client } = require('@node-mysql/mysql');
 const connection = new Client({
   host : 'localhost',
   ssl  : {
@@ -151,7 +151,7 @@ prepend the flag with a minus sign. To add a flag that is not in the default lis
 just write the flag name, or prefix it with a plus (case insensitive).
 
 ```js
-const { Pool, Client } = require('mysql-promise-plus');
+const { Pool, Client } = require('@node-mysql/mysql');
 const connection = new Client({
   // disable FOUND_ROWS flag, enable IGNORE_SPACE flag
   flags: '-FOUND_ROWS,IGNORE_SPACE'
